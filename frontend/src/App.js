@@ -5,6 +5,7 @@ function App() {
   const [question, setQuestion] = useState('');
   const [contextUrl, setContextUrl] = useState('');
   const [answer, setAnswer] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [urlError, setUrlError] = useState('');
 
@@ -34,8 +35,10 @@ function App() {
       const data = await response.json();
       if (response.ok) {
         setAnswer(data.answer);
+        setImageUrl(data.imageUrl || ''); // Handle null imageUrl
       } else {
         setAnswer('Error: ' + data.error);
+        setImageUrl('');
       }
     } catch (error) {
       setAnswer('Error: Could not connect to the server');
@@ -91,10 +94,25 @@ function App() {
             </button>
           </form>
         </div>
-        {answer && (
+        {loading ? (
+          <div className="loading">
+            <div className="loading-spinner"></div>
+            <p>Finding the best answer for you...</p>
+          </div>
+        ) : answer && (
           <div className="answer">
-            <h2>Answer:</h2>
-            <p>{answer}</p>
+            <div className="answer-content">
+              <h2>Answer:</h2>
+              <p>{answer}</p>
+            </div>
+            {imageUrl && (
+              <div className="answer-image">
+                <img src={imageUrl} alt="Relevant illustration" />
+                <div className="image-loading" style={{ display: loading ? 'flex' : 'none' }}>
+                  <div className="loading-spinner"></div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>

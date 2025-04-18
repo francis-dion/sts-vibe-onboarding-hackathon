@@ -5,6 +5,8 @@ const fs = require('fs-extra');
 const path = require('path');
 const OpenAI = require('openai');
 const axios = require('axios');
+const cheerio = require('cheerio');
+const url = require('url');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -35,10 +37,67 @@ async function readMarkdownFiles(directory) {
   return content;
 }
 
+// Function to extract images from HTML
+async function extractImages(pageUrl, html) {
+  const $ = cheerio.load(html);
+  const images = [];
+  const baseUrl = pageUrl;
+
+  $('img').each((_, element) => {
+    const img = $(element);
+    const src = img.attr('src');
+    const alt = img.attr('alt') || '';
+    const title = img.attr('title') || '';
+    const width = img.attr('width');
+    const height = img.attr('height');
+
+    if (src) {
+      const absoluteUrl = new URL(src, baseUrl).href;
+      images.push({
+        url: absoluteUrl,
+        alt,
+        title,
+        width,
+        height,
+        description: [alt, title].filter(Boolean).join(' ')
+      });
+    }
+  });
+
+  return images;
+}
+
+// Function to find most relevant image
+async function findRelevantImage(images, context) {
+  if (images.length === 0) return null;
+
+  // Use OpenAI to rank images based on their descriptions
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      {
+        role: "system",
+        content: "You are an image selection assistant. Choose the most relevant image based on the context. Return ONLY the index number (0-based) of the best matching image, nothing else."
+      },
+      {
+        role: "user",
+        content: `Context: ${context}\n\nAvailable images:\n${images.map((img, i) => 
+          `${i}. ${img.description || 'No description'} (${img.url})`
+        ).join('\n')}`
+      }
+    ],
+    temperature: 0,
+    max_tokens: 10
+  });
+
+  const selectedIndex = parseInt(response.choices[0].message.content.trim());
+  return isNaN(selectedIndex) || selectedIndex >= images.length ? null : images[selectedIndex];
+}
+
 // Function to fetch URL content
-async function fetchUrlContent(url) {
+async function fetchUrlContent(pageUrl) {
   try {
-    const response = await axios.get(url, {
+    const response = await axios.get(pageUrl, {
       headers: {
         'Accept': 'text/html,text/plain,application/json'
       },
@@ -48,29 +107,30 @@ async function fetchUrlContent(url) {
 
     const contentType = response.headers['content-type'] || '';
     let content = response.data;
+    let images = [];
 
-    // Handle different content types
-    if (contentType.includes('application/json')) {
-      content = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-    } else if (contentType.includes('text/html')) {
-      // Basic HTML cleanup - remove scripts and style tags
+    if (contentType.includes('text/html')) {
+      // Extract images before cleaning HTML
+      images = await extractImages(pageUrl, content);
+      // Clean HTML content
       content = content.toString()
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
         .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ') // Remove HTML tags
-        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
     }
 
-    // Truncate content if it's too large for the OpenAI API
-    const MAX_CHARS = 12000; // Leave room for system prompt and question
+    // Truncate content if it's too large
+    const MAX_CHARS = 12000;
     if (content.length > MAX_CHARS) {
       const halfLength = Math.floor(MAX_CHARS / 2);
       content = content.slice(0, halfLength) + 
         '\n\n[Content truncated due to length...]\n\n' + 
         content.slice(-halfLength);
     }
-    return content;
+
+    return { content, images };
   } catch (error) {
     console.error('Error fetching URL:', {
       url,
@@ -91,7 +151,7 @@ app.post('/api/ask', async (req, res) => {
     const guideContent = await readMarkdownFiles(path.join(__dirname, '..', 'STS User Guide'));
     
     // Fetch URL content if provided
-    let urlContent = '';
+    let urlContent = { content: '', images: [] };
     if (contextUrl) {
       urlContent = await fetchUrlContent(contextUrl);
     }
@@ -106,14 +166,30 @@ app.post('/api/ask', async (req, res) => {
         },
         {
           role: "user",
-          content: `Documentation Context:\n${guideContent}\n\nAdditional Context:\n${urlContent ? `Content from ${contextUrl}:\n${urlContent}\n\n` : ''}Question: ${question}`
+          content: `Documentation Context:\n${guideContent}\n\nAdditional Context:\n${urlContent.content ? `Content from ${contextUrl}:\n${urlContent.content}\n\n` : ''}Question: ${question}`
         }
       ],
       temperature: 0.7,
       max_tokens: 1000
     });
-    
-    res.json({ answer: response.choices[0].message.content });
+
+    // Find a relevant image from the URL content if available
+    let imageUrl = null;
+    if (contextUrl && urlContent.images.length > 0) {
+      try {
+        const relevantImage = await findRelevantImage(urlContent.images, response.choices[0].message.content);
+        if (relevantImage) {
+          imageUrl = relevantImage.url;
+        }
+      } catch (imageError) {
+        console.error('Image selection error:', imageError);
+      }
+    }
+
+    res.json({ 
+      answer: response.choices[0].message.content,
+      imageUrl
+    });
   } catch (error) {
     console.error('Error details:', {
       message: error.message,
