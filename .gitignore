@@ -1,1 +1,41 @@
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build outputs
+/build
+/dist
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+/coverage
+
+# Production build files
+/frontend/build
+
+# Temporary files
+*.log
+*.tmp

@@ -9,16 +9,10 @@ Develop a functional application that uses AI to assist users in onboarding onto
 2. **Onboarding Guidance**
 	* Provide step-by-step instructions for new users to get started with STS.
 	* Use AI to personalize the onboarding experience based on user interactions.
-3. **Integration with STS**
-	* Connect to the STS platform to fetch relevant onboarding resources and documentation.
-	* Automate certain onboarding tasks, if possible, using agentic AI.
 4. **User Interface**
 	* Simple, intuitive UI suitable for quick deployment.
 	* Use Windsurf for building responsive and attractive UI components.
-5. **Collaboration and Planning Features**
-	* Briefly introduce STS's collaboration, alignment, decision-making, and planning features through prompts or mini-tutorials.
-6. **Feedback Mechanism**
-	* Allow users to provide feedback on the onboarding process and AI assistance.
+
 
 ## Development Timeline
 ### Hour 1
